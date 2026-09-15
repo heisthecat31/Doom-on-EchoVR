@@ -1,7 +1,10 @@
 # Doom on Echo VR
 
-Run Doom shareware inside Echo VR's hand tablet. The left **?** tab launches a
-native Doom worker and displays its frames alongside eight touch controls.
+Run Doom shareware inside Echo VR's hand tablet. When enabled, the left **?** tab
+launches a native Doom worker and displays its frames alongside eight touch controls.
+
+**Doom is disabled by default** so the tablet integration can be reused for
+another project. See [Enable or disable Doom](#enable-or-disable-doom).
 
 **Experimental Windows PC build:** offline engine, input, pause/resume and native
 frame-client tests pass. The Doom picture, touch controls and performance still
@@ -9,7 +12,7 @@ need in-headset verification. Audio is currently disabled.
 
 ## Play
 
-After building and installing, launch Echo VR normally and open **?** on the hand
+After enabling, building and installing, launch Echo VR normally and open **?** on the hand
 tablet. The worker starts automatically; Python is only needed for development.
 
 | Tablet control | Keyboard equivalent | Action |
@@ -27,6 +30,36 @@ with Echo.
 
 The engine renders at 320 x 200. Echo displays the image at 4:3 using colored UI
 quads, starting at 160 x 100 and lowering detail to fit the available draw budget.
+
+## Enable or disable Doom
+
+Set `DOOM_ENABLED` in
+[PersonalDiscTrainer/native/runtime.cpp](PersonalDiscTrainer/native/runtime.cpp):
+
+```cpp
+static constexpr bool DOOM_ENABLED=false;
+```
+
+- `false` (default): hides the **?** tab, disables its touch target, prevents
+  worker launch and skips both Doom rendering hooks.
+- `true`: enables the Doom tab, worker and rendering hooks.
+
+Tools, Personal Disc and Goalie remain available in either mode. Doom's source,
+assets and shared tablet integration are retained for reuse. The flag only
+controls the installed tablet runtime; standalone worker tests still run Doom.
+
+This is a build-time setting. After completing the initial build/preparation
+below, apply a changed flag from the repository root with:
+
+```powershell
+.\PersonalDiscTrainer\native\build.cmd
+python -B PersonalDiscTrainer/package_native.py
+```
+
+Close Echo VR and install the rebuilt package using the
+[installation instructions](#install-and-restore). Editing the flag alone does
+not change an already installed DLL. To re-enable Doom, set it to `true` and
+repeat the same build, package and install steps.
 
 ## Build
 

@@ -1,5 +1,11 @@
 # Shared native tablet runtime
 
+**Doom is disabled by default.** `DOOM_ENABLED=false` in `native/runtime.cpp`
+hides and gates the ? tab, prevents worker launch and skips both Doom rendering
+hooks. Tools, Personal Disc and Goalie remain available. See the
+[enable/disable instructions](../README.md#enable-or-disable-doom) to change the
+flag and rebuild/reinstall; the source and assets are preserved.
+
 Tablet Doom uses the `EchoTabletTrainer` runtime to load through Echo's script
 loader, manage tablet pages and submit Doom frames to the native canvas renderer.
 This source snapshot includes the runtime, script wrappers, manifest merger,

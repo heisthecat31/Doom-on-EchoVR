@@ -59,6 +59,8 @@ using UnloadCall=void(*)(void*,U,U,U);
 static CanvasCall loadedOriginal; static UnloadCall unloadOriginal;
 static void(*buttonOriginal)(void*);
 static DoomClient doom;
+// Build-time switch: preserve the port for reuse without activating Doom.
+static constexpr bool DOOM_ENABLED=false;
 static std::atomic<void*> doomRootCanvas{nullptr},doomPageCanvas{nullptr};
 static std::atomic<bool> doomSelected{false};
 static void(*canvasRenderOriginal)(void*);
@@ -102,7 +104,7 @@ static void remember(void* p,unsigned depth=0) {
 }
 static void render(Context& c) {
     bool active=c.page!=Page::Stock && !fault;
-    if(c.views[0].p==doomRootCanvas.load()) doomSelected=active && c.page==Page::Doom;
+    if(c.views[0].p==doomRootCanvas.load()) doomSelected=DOOM_ENABLED && active && c.page==Page::Doom;
     for(unsigned i=3;i<6;i++) {
         auto& v=c.views[i]; if(!v.p) continue;
         if(active) { if(!v.saved) {v.opacity=at<float>(v.p,0x358);v.saved=true;} alpha(v.p,0); }
@@ -123,7 +125,10 @@ static void render(Context& c) {
         show(root.p,10,active && c.page==Page::Doom);
         text(root.p,9,c.page==Page::Doom?"DOOM":"TOOLS");
     }
-    if(c.views[1].p) text(c.views[1].p,9,active && c.page==Page::Tools?"TOOLS*":"TOOLS");
+    if(c.views[1].p) {
+        text(c.views[1].p,9,active && c.page==Page::Tools?"TOOLS*":"TOOLS");
+        show(c.views[1].p,10,DOOM_ENABLED);
+    }
     if(active && c.page==Page::Doom && c.views[6].p)
         text(c.views[6].p,3,!doom.running()?"DOOM STOPPED | PRESS ? TO RESTART":doom.frames()>0?"ARROWS | CTRL | SPACE | ENTER | ESC":"STARTING DOOM...");
     if(c.views[2].p) {
@@ -157,8 +162,8 @@ static void gate(Context& c,void* cs) {
     std::set<unsigned> live; for(auto b:buttons) live.insert(b.handle);
     for(auto it=c.masked.begin();it!=c.masked.end();) if(!live.count(*it)) it=c.masked.erase(it); else ++it;
     for(auto b:buttons) {
-        bool hide=!fault && (doomKey(b.name)>=0?c.page!=Page::Doom:(b.name==GOALIE || b.name==DISC)?c.page!=Page::Tools:
-            isContent(b.name)?c.page!=Page::Stock:!(c.views[0].p && c.views[1].p && c.views[b.name==QUESTION?6:2].p));
+        bool hide=(b.name==QUESTION && !DOOM_ENABLED) || (!fault && (doomKey(b.name)>=0?c.page!=Page::Doom:(b.name==GOALIE || b.name==DISC)?c.page!=Page::Tools:
+            isContent(b.name)?c.page!=Page::Stock:!(c.views[0].p && c.views[1].p && c.views[b.name==QUESTION?6:2].p)));
         if(hide && !c.masked.count(b.handle)) {
             if(b.reasons&0x8000) {fail("Button disable bit 0x8000 already owned");return;}
             disable(cs,b.handle,0x8000);c.masked.insert(b.handle);
@@ -409,7 +414,7 @@ static void dispatch(void* gs,U event,U actor,U component,int arg) {
                 auto& c=it->second;
                 if(stock(component)) {c.page=Page::Stock;doom.blur();}
                 else if(component==TAB) {c.page=Page::Tools;doom.blur();}
-                else if(component==QUESTION) {c.page=Page::Doom;log(doom.start()?"Question tab: native Doom worker started/resumed":"Doom worker/data missing or launch failed");}
+                else if(component==QUESTION && DOOM_ENABLED) {c.page=Page::Doom;log(doom.start()?"Question tab: native Doom worker started/resumed":"Doom worker/data missing or launch failed");}
                 else if(c.page==Page::Doom && doomKey(component)>=0) doom.key(unsigned(doomKey(component)),true);
                 else if(c.page==Page::Tools && component==DISC) {discOn=!discOn;if(!discOn) stop("PERSONAL DISC OFF | GOALIE OFF");log(discOn?"Personal Disc ON":"Personal Disc OFF");}
                 else if(c.page==Page::Tools && component==GOALIE) {
@@ -469,6 +474,7 @@ static bool initialize() {
     if(initialized) return !fault;
     initialized=true;exe=reinterpret_cast<P>(GetModuleHandleW(nullptr));
     log("Native tablet trainer initializing; no Python or Frida runtime");
+    if(!DOOM_ENABLED) log("Doom disabled: question tab hidden, worker launch and Doom renderer hooks inactive");
     auto nt=reinterpret_cast<IMAGE_NT_HEADERS64*>(exe+at<unsigned>(exe,0x3c));
     if(nt->OptionalHeader.SizeOfImage!=35852288 || nt->FileHeader.TimeDateStamp!=EXE_TIMESTAMP) {fail("Unsupported Echo executable version");return false;}
     for(auto s:signatures) if(memcmp(exe+s.rva,s.bytes,16)!=0) {char line[120];sprintf_s(line,"Native signature mismatch at %x",s.rva);fail(line);return false;}
@@ -479,8 +485,8 @@ static bool initialize() {
         hook(exe+0x7287b0,reinterpret_cast<void*>(unload),reinterpret_cast<void**>(&unloadOriginal)) &&
         hook(exe+0x510060,reinterpret_cast<void*>(dispatch),reinterpret_cast<void**>(&dispatchOriginal)) &&
         hook(exe+0x92f3f0,reinterpret_cast<void*>(button),reinterpret_cast<void**>(&buttonOriginal)) &&
-        hook(exe+0x724ff0,reinterpret_cast<void*>(canvasRender),reinterpret_cast<void**>(&canvasRenderOriginal)) &&
-        hook(exe+0x725730,reinterpret_cast<void*>(elementsRender),reinterpret_cast<void**>(&elementsRenderOriginal));
+        (!DOOM_ENABLED || (hook(exe+0x724ff0,reinterpret_cast<void*>(canvasRender),reinterpret_cast<void**>(&canvasRenderOriginal)) &&
+        hook(exe+0x725730,reinterpret_cast<void*>(elementsRender),reinterpret_cast<void**>(&elementsRenderOriginal))));
     if(!ok) MH_DisableHook(MH_ALL_HOOKS);
     return ok;
 }

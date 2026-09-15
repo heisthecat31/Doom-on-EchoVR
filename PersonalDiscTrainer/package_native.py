@@ -13,7 +13,7 @@ allowed={
 doom=HERE.parent/'TabletDoom';(out/'doom').mkdir(exist_ok=True)
 shutil.copy2(doom/'build/DoomWorker.exe',out/'doom/DoomWorker.exe')
 shutil.copy2(doom/'data/doom1.wad',out/'doom/doom1.wad')
-manifest=dict(version='0.2.0-doom-test',exe_size=inputs['exe_size'],exe_timestamp=inputs['exe_timestamp'],scripts=[],files=[])
+manifest=dict(version='0.2.1',exe_size=inputs['exe_size'],exe_timestamp=inputs['exe_timestamp'],scripts=[],files=[])
 for name,s in inputs['scripts'].items():
     manifest['scripts'].append(dict(name=name,accepted=[s['sha256'],*allowed.get(name,[])]))
 paths=[out/'EchoTabletTrainer.dll',out/'manifest_merge.exe',out/'tablet.patch',*sorted((out/'scripts').glob('*.dll')),*sorted((out/'doom').iterdir())]
