@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.log
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.exe
+*.dll
+/TabletDoom/build/
+/PersonalDiscTrainer/native/build/
+/PersonalDiscTrainer/native/dist/
+/PersonalDiscTrainer/native/*.zip
+.vs/
+.venv/

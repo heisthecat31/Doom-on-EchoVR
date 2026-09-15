@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "exe_size": 35852288,
+  "exe_timestamp": 1683152886,
+  "scripts": {
+    "351c49438bd38225.dll": {
+      "kind": 0,
+      "original": "351c49438bd38225.trainer-original.dll",
+      "sha256": "5421de8a34703d9872df0fa3841443eee8a28577fb50461cc5c01e2911bcd911"
+    },
+    "38965d90a823f03f.dll": {
+      "kind": 1,
+      "original": "38965d90a823f03f.trainer-original.dll",
+      "sha256": "deca1e86cd437116a1afab07bcf228274d9d51274b385a92ab7568d346759c75"
+    },
+    "156208a7bf6bcfec.dll": {
+      "kind": 2,
+      "original": "156208a7bf6bcfec.trainer-original.dll",
+      "sha256": "b239c96c50499119221ce2e3ad3b4960649fd594de1583537bfca3a3a336fc4e"
+    }
+  },
+  "files": {}
+}
