@@ -93,11 +93,16 @@ class Canvas:
         descriptor(self.header, 0x50, len(self.elements), 224)
         return index
 
-    def label(self, template, name, text, rect, size=30, hidden=False):
+    def label(self, template, name, text, rect, size=30, hidden=False, capacity=0):
+        """`capacity` reserves room for longer strings written later at runtime.
+
+        Native SetText writes into this slot, so anything the runtime may show
+        must fit; the default only covers the literal given here.
+        """
         index = self.append(template, name, rect, hidden=hidden)
         row = self.elements[index]
         encoded = text.encode('utf-8')
-        capacity = max(64, len(encoded)+1)
+        capacity = max(64, len(encoded)+1, capacity)
         slot = len(self.string_offsets)//4
         self.string_offsets += struct.pack('<I', len(self.text))
         self.text += encoded + bytes(capacity-len(encoded))

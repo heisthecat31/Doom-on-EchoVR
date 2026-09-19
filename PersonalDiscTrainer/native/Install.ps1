@@ -79,7 +79,7 @@ New-Item -ItemType Directory -Path $staging | Out-Null
 if ($LASTEXITCODE -ne 0) {throw 'Tablet manifest merge refused. No game files changed.'}
 $copies=@()
 foreach ($file in $package.files) {
-    if ($file.path -eq 'EchoTabletTrainer.dll' -or $file.path.StartsWith('scripts/') -or $file.path.StartsWith('doom/')) {
+    if ($file.path -eq 'EchoTabletTrainer.dll' -or $file.path.StartsWith('scripts/') -or $file.path.StartsWith('doom/') -or $file.path.StartsWith('music/')) {
         $copies+=@{relative='bin\win10\'+$file.path.Replace('/','\');source=(Join-Path $PSScriptRoot $file.path)}
     }
 }

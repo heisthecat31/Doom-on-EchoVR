@@ -98,12 +98,20 @@ Header (0x1b0 bytes). Array descriptors are the engine's serialized `CMemBlock`+
 | +0x60 | element id (== index in shipped data) |
 | +0x78 | Mask: texture sym |
 | +0x88 | **Sprite: CGTextureResource name sym; Text: CTTFontResource name sym** (registered by `FUN_140719b80`) |
+| +0x9c / +0xa0 | **Text: anchor fractions, X then Y** — 0 left/top, 0.5 centre, 1 right/bottom |
+| +0xa4 | **Text: font size** (u16, pixels) |
 | +0xa8 | ColorMask: texture sym |
 | +0x78 | ChildCanvas: canvas name (`FUN_1407235e0` creates the child instance); corrected from +0x98 |
 
 **Behavior record (0x58):** `+0 type sym` (= `sym("R15PointerInteractBehavior")` etc. — the class name without the `C`), `+8 behavior name sym`, `+0x10` data MemBlock (byte size at +0x18, data lives in the blob area after the records), `+0x48 element index`, `+0x50 u16`, `+0x52 u32`, `+0x56 u16`. `InitializeBehaviors` @ `0x1407205c0` looks the type sym up in the CS's registry (`CS+0x1b8` sorted map → index into `CS+0x180` `SUIBehaviorTypeItems` array) and calls the factory's vslot 3 (e.g. `FUN_14010e2d0` for PointerInteract) then the behavior's vslot 7 `Init(componentId, elementId, canvasInstance, elementPtr)`. Unknown type → assert "Behavior type '%s' (found in canvas %s) not registered" (`cuicanvasinstance.cpp:0x93d`).
 
 Known behavior classes (35): `R15PointerInteractBehavior`, `R15PointerInteractStateControlBehavior`, `R15PointerCursorBehavior`, `RadioButtonBehavior`, `R15ElementAnimationBehavior`, `R15SelectedFrameBehavior`, `ScrollableList/Element/PageBehavior`, `FlipbookBehavior`, `TextAnchor/TextResizeBehavior`, `R15DynLoadTextureBehavior`, `R15ItemPreview/ItemRarityFrame/StoreItem/BattlePass*`, `R15TextEntryBehavior`, ... (full list in `echovr_ui.py`).
+
+The text anchor pair was read off all 277 shipped `CUICanvasResource`s (2026-09-19): both
+fields only ever hold 0.0, 0.5 or 1.0 apart from a handful of in-between values, and X-then-Y
+follows the anchor pair at +0x24. The stock Tools page corroborates it — its labels are inset
+13 px horizontally from their panel but match it exactly in Y, which is what `(0.0, 0.5)` =
+left, vertically centred needs. Not yet confirmed against the decompilation.
 
 A **button** in shipped data = a Panel/Sprite element carrying `R15PointerInteractBehavior` (16 B data) + `R15PointerInteractStateControlBehavior` (304 B data: named states idle/hover/press with animation links) + usually `R15ElementAnimationBehavior`. A **tab strip** additionally uses `RadioButtonBehavior` (links the sibling buttons; `FUN_1410474a0`).
 

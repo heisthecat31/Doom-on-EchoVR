@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import json
+import os
 import struct
 import sys
 
@@ -58,9 +59,19 @@ def main():
         frame=(tablet/f'build/tools_tab/packages/48037dc70b0ecab2_{pkg}').read_bytes()[offset:offset+size]
         patch+=struct.pack('<2Q',*before)+struct.pack('<QQQII',*a)+struct.pack('<5Q',*b)+struct.pack('<I',len(frame))+frame
     (DIST/'tablet.patch').write_bytes(patch)
-    question=HERE.parent/'TabletDoom/build/tablet.patch'
-    if not question.exists(): raise RuntimeError('Run python -B TabletDoom/build_question_tab.py from the workspace first')
-    (DIST/'tablet.patch').write_bytes(question.read_bytes())
-    print('Prepared native signatures and three preserved script copies.')
+    # The MUSIC and Doom tabs occupy the same navigation slot, so exactly one of
+    # their patches is installed. Set ECHOVR_TABLET_TAB when both are built.
+    tabs={'music':(HERE.parent/'TabletMusic/build/tablet.patch','python -B TabletMusic/build_music_tab.py'),
+          'doom':(HERE.parent/'TabletDoom/build/tablet.patch','python -B TabletDoom/build_question_tab.py')}
+    choice=os.environ.get('ECHOVR_TABLET_TAB','').strip().lower()
+    built=[name for name,(path,_) in tabs.items() if path.exists()]
+    if choice:
+        if choice not in tabs: raise RuntimeError(f'ECHOVR_TABLET_TAB must be one of: {", ".join(tabs)}')
+        if not tabs[choice][0].exists(): raise RuntimeError(f'Run {tabs[choice][1]} from the workspace first')
+    elif len(built)==1: choice=built[0]
+    elif not built: raise RuntimeError(f'Run {tabs["music"][1]} from the workspace first')
+    else: raise RuntimeError('Both tab patches are built; set ECHOVR_TABLET_TAB to music or doom')
+    (DIST/'tablet.patch').write_bytes(tabs[choice][0].read_bytes())
+    print(f'Prepared native signatures, three preserved script copies and the {choice} tablet tab.')
 
 if __name__=='__main__':main()

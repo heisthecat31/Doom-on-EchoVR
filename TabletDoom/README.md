@@ -3,9 +3,12 @@
 **Doom is disabled by default in the current runtime.** The ? tab and its touch
 target are disabled, the worker cannot launch through the tablet, and the Doom
 renderer hooks are skipped. Source and assets remain available for reuse.
-See [enable/disable instructions](../README.md#enable-or-disable-doom) to change
+See [enable/disable instructions](../README.md#enable-or-disable-a-tab) to change
 `DOOM_ENABLED` and rebuild/reinstall. The port description below applies when
 Doom is enabled; standalone offline worker tests run in either mode.
+
+The [MUSIC tab](../TabletMusic/README.md) now occupies the same navigation slot
+by default, so the tablet patch you build decides which of the two is installed.
 
 The left **?** tab now starts a native Doom worker and displays its frames inside
 the tablet page. The old **COMING SOON** page has been replaced by a screen and

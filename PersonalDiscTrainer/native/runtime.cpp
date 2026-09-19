@@ -16,6 +16,7 @@
 #include "policy.h"
 #include "cut_redirect.h"
 #include "../../TabletDoom/native/client.h"
+#include "../../TabletMusic/native/client.h"
 
 using U=uint64_t; using P=unsigned char*;
 template<class T> T& at(void* p,size_t n) { return *reinterpret_cast<T*>(static_cast<P>(p)+n); }
@@ -23,6 +24,7 @@ template<class T> T fn(void* p,size_t n) { return reinterpret_cast<T>(static_cas
 template<class T> T virt(void* p,size_t n) { return at<T>(at<void*>(p,0),n); }
 constexpr U NONE=~U(0), TAB=0x998a2aa21c569965, GOALIE=0xaca450182e7e67b1, DISC=0x3f3f0d98078a6755;
 #include "generated/question_tab.h"
+#include "generated/music_tab.h"
 constexpr U PRESS=0xfdb213d9dc5e4826, RELEASE=0x0d7ded077f321f69b;
 static P exe;
 static std::recursive_mutex mutex;
@@ -68,10 +70,23 @@ static void(*elementsRenderOriginal)(void*,void*,void*);
 static thread_local std::vector<DoomQuad> doomQuads;
 static thread_local bool doomDrawing=false;
 static int doomKey(U name) {for(unsigned i=0;i<DK_COUNT;i++) if(DOOM_KEYS[i]==name) return int(i);return -1;}
+static MusicClient music;
+// Build-time switch, independent of Doom: both tabs claim the same free
+// navigation slot, so only the one whose tablet patch is installed appears.
+static constexpr bool MUSIC_ENABLED=true;
+// Indexed by MUSIC_BUTTONS; the builder emits that array in this order.
+static constexpr LONG MUSIC_COMMANDS[]={MC_PREV,MC_PLAYPAUSE,MC_NEXT,MC_VOLDOWN,MC_VOLUP,MC_SOURCE};
+static_assert(sizeof(MUSIC_COMMANDS)/sizeof(*MUSIC_COMMANDS)==sizeof(MUSIC_BUTTONS)/sizeof(*MUSIC_BUTTONS),
+    "Music button/command tables disagree; rerun TabletMusic/build_music_tab.py");
+static int musicButton(U name) {
+    for(unsigned i=0;i<sizeof(MUSIC_BUTTONS)/sizeof(*MUSIC_BUTTONS);i++) if(MUSIC_BUTTONS[i]==name) return int(i);
+    return -1;
+}
 
 struct View { void* p=nullptr; bool saved=false; float opacity=0; std::array<bool,3> visible{}; };
-enum class Page { Stock,Tools,Doom };
-struct Context { Page page=Page::Stock; std::array<View,7> views{}; std::set<unsigned> masked; };
+enum class Page { Stock,Tools,Doom,Music };
+struct Context { Page page=Page::Stock; std::array<View,8> views{}; std::set<unsigned> masked;
+                 void* musicCanvas=nullptr; int musicBar=-1,musicVolume=-1; };
 static std::map<void*,Context> contexts;
 static std::map<void*,std::pair<void*,unsigned>> canvases;
 static std::set<void*> pending;
@@ -85,10 +100,10 @@ static bool isContent(U n) { return std::find(std::begin(content),std::end(conte
 static void remember(void* p,unsigned depth=0) {
     if (!p || depth>8 || canvases.count(p)) return;
     U n=at<U>(p,0xc0); auto elements=at<P>(p,0x90);
-    const unsigned counts[]={11,11,8,24,59,7,DOOM_ELEMENTS}, indices[]={7,9,1,0,0,0,1};
+    const unsigned counts[]={11,11,8,24,59,7,DOOM_ELEMENTS,MUSIC_ELEMENTS}, indices[]={7,9,1,0,0,0,1,0};  // music marker is its background, element 0
     const U markers[]={0xe1c7bcf6b87ef759,0xcca1f4ca7df27d97,0x2e30b3b1c63a9307,
-        0x41d2cf3808220b1a,0x2fd5888f5f7a5286,0xf79f5459a0f0cf34,DOOM_MARKER};
-    for(unsigned kind=0;kind<7;kind++) {
+        0x41d2cf3808220b1a,0x2fd5888f5f7a5286,0xf79f5459a0f0cf34,DOOM_MARKER,MUSIC_MARKER};
+    for(unsigned kind=0;kind<8;kind++) {
         if(n!=counts[kind] || !elements || at<U>(elements,indices[kind]*224)!=markers[kind]) continue;
         auto cs=at<void*>(p,0x370);
         if (!cs) { pending.insert(p); return; }
@@ -100,6 +115,46 @@ static void remember(void* p,unsigned depth=0) {
         char line[120]; sprintf_s(line,"canvas kind=%u gs=%p ptr=%p",kind,gs,p); log(line);
         remember(at<void*>(p,0x378),depth+1);
         return;
+    }
+}
+static void musicLabel(void* page,unsigned element,unsigned capacity,unsigned display,const char* value) {
+    char line[MUSIC_TEXT+4];
+    musicClamp(line,sizeof(line),capacity,display,value);
+    text(page,element,line);
+}
+static void renderMusic(Context& c) {
+    auto page=c.views[7].p; if(!page) return;
+    if(page!=c.musicCanvas) {c.musicCanvas=page;c.musicBar=-1;c.musicVolume=-1;}
+    music.shown();
+    auto& s=music.snapshot();
+    bool live=music.running() && s.updates>0;
+    musicLabel(page,MUSIC_SOURCE_TEXT,MUSIC_LINE_CAP,18,
+        !music.running()?"NO WORKER":s.updates==0?"CONNECTING":s.source);
+    musicLabel(page,MUSIC_TITLE_TEXT,MUSIC_TITLE_CAP,34,
+        !live?"":s.title[0]?s.title:"NOTHING PLAYING");
+    musicLabel(page,MUSIC_ARTIST_TEXT,MUSIC_ARTIST_CAP,58,live?s.artist:"");
+    text(page,MUSIC_PLAY_TEXT,s.playback==MP_PLAYING?"PAUSE":"PLAY");
+    char elapsed[16]="",total[16]="";
+    if(live && s.duration>0) {
+        auto clock=[](char* out,size_t n,LONG seconds) {
+            if(seconds<0) strcpy_s(out,n,"--:--");
+            else sprintf_s(out,n,"%ld:%02ld",seconds/60,seconds%60);
+        };
+        clock(elapsed,sizeof(elapsed),s.position);
+        clock(total,sizeof(total),s.duration);
+    }
+    text(page,MUSIC_ELAPSED_TEXT,elapsed);
+    text(page,MUSIC_TOTAL_TEXT,total);
+    int filled=live?musicFilled(s.position,s.duration,MUSIC_BAR_COUNT):0;
+    if(filled!=c.musicBar) {
+        for(unsigned i=0;i<MUSIC_BAR_COUNT;i++) show(page,MUSIC_BAR_FIRST+i,int(i)<filled);
+        c.musicBar=filled;
+    }
+    /* The meter stays dark when no audio session matched, rather than lying. */
+    int level=live && s.volume>=0?musicFilled(s.volume,100,MUSIC_VOL_COUNT):0;
+    if(level!=c.musicVolume) {
+        for(unsigned i=0;i<MUSIC_VOL_COUNT;i++) show(page,MUSIC_VOL_FIRST+i,int(i)<level);
+        c.musicVolume=level;
     }
 }
 static void render(Context& c) {
@@ -122,13 +177,15 @@ static void render(Context& c) {
         else if(root.saved) {for(unsigned i=0;i<3;i++) show(root.p,hide[i],root.visible[i]);root.saved=false;}
         show(root.p,7,active && c.page==Page::Tools);
         for(unsigned i=8;i<=9;i++) show(root.p,i,active);
-        show(root.p,10,active && c.page==Page::Doom);
-        text(root.p,9,c.page==Page::Doom?"DOOM":"TOOLS");
+        // Element 10 is whichever extra page child the installed tablet patch added.
+        show(root.p,10,active && (c.page==Page::Doom || c.page==Page::Music));
+        text(root.p,9,c.page==Page::Doom?"DOOM":c.page==Page::Music?"MUSIC":"TOOLS");
     }
     if(c.views[1].p) {
         text(c.views[1].p,9,active && c.page==Page::Tools?"TOOLS*":"TOOLS");
-        show(c.views[1].p,10,DOOM_ENABLED);
+        show(c.views[1].p,10,DOOM_ENABLED || MUSIC_ENABLED);
     }
+    if(active && c.page==Page::Music) renderMusic(c);
     if(active && c.page==Page::Doom && c.views[6].p)
         text(c.views[6].p,3,!doom.running()?"DOOM STOPPED | PRESS ? TO RESTART":doom.frames()>0?"ARROWS | CTRL | SPACE | ENTER | ESC":"STARTING DOOM...");
     if(c.views[2].p) {
@@ -152,7 +209,8 @@ static void gate(Context& c,void* cs) {
         unsigned row=at<unsigned short>(instances,i*400);
         if(row>=count) {fail("Invalid button row");return;}
         U name=at<U>(rows,row*296);
-        if(name!=TAB && name!=QUESTION && name!=GOALIE && name!=DISC && doomKey(name)<0 && !isContent(name)) continue;
+        if(name!=TAB && name!=QUESTION && name!=MUSIC_TAB && name!=GOALIE && name!=DISC
+           && doomKey(name)<0 && musicButton(name)<0 && !isContent(name)) continue;
         if(!isContent(name) && at<U>(rows,row*296+8)!=0x6c1f6ff04e070923) continue;
         unsigned slot=at<unsigned short>(inverse,i*2);
         if(slot>=count) {fail("Invalid button handle slot");return;}
@@ -162,8 +220,10 @@ static void gate(Context& c,void* cs) {
     std::set<unsigned> live; for(auto b:buttons) live.insert(b.handle);
     for(auto it=c.masked.begin();it!=c.masked.end();) if(!live.count(*it)) it=c.masked.erase(it); else ++it;
     for(auto b:buttons) {
-        bool hide=(b.name==QUESTION && !DOOM_ENABLED) || (!fault && (doomKey(b.name)>=0?c.page!=Page::Doom:(b.name==GOALIE || b.name==DISC)?c.page!=Page::Tools:
-            isContent(b.name)?c.page!=Page::Stock:!(c.views[0].p && c.views[1].p && c.views[b.name==QUESTION?6:2].p)));
+        bool hide=(b.name==QUESTION && !DOOM_ENABLED) || (b.name==MUSIC_TAB && !MUSIC_ENABLED) ||
+            (!fault && (doomKey(b.name)>=0?c.page!=Page::Doom:musicButton(b.name)>=0?c.page!=Page::Music:
+            (b.name==GOALIE || b.name==DISC)?c.page!=Page::Tools:
+            isContent(b.name)?c.page!=Page::Stock:!(c.views[0].p && c.views[1].p && c.views[b.name==QUESTION?6:b.name==MUSIC_TAB?7:2].p)));
         if(hide && !c.masked.count(b.handle)) {
             if(b.reasons&0x8000) {fail("Button disable bit 0x8000 already owned");return;}
             disable(cs,b.handle,0x8000);c.masked.insert(b.handle);
@@ -390,7 +450,8 @@ static void unload(void* p,U a,U b,U c) {
     if(it!=canvases.end()) {
         auto& ctx=contexts[it->second.first];unsigned kind=it->second.second;
         if(ctx.views[kind].p==p) ctx.views[kind]=View{};
-        if(kind==0) {ctx.page=Page::Stock;held.clear();stop("MAP CHANGED | GOALIE OFF");}
+        if(kind==7) {ctx.musicCanvas=nullptr;ctx.musicBar=-1;ctx.musicVolume=-1;}
+        if(kind==0) {ctx.page=Page::Stock;held.clear();music.blur();stop("MAP CHANGED | GOALIE OFF");}
         canvases.erase(it);
     }}
     unloadOriginal(p,a,b,c);
@@ -405,17 +466,19 @@ static void button(void* cs) {
 }
 static void dispatch(void* gs,U event,U actor,U component,int arg) {
     {std::lock_guard<std::recursive_mutex> lock(mutex);
-    if(!fault && (event==PRESS || event==RELEASE) && (component==TAB || component==QUESTION || component==GOALIE || component==DISC || doomKey(component)>=0 || stock(component))) {
+    if(!fault && (event==PRESS || event==RELEASE) && (component==TAB || component==QUESTION || component==MUSIC_TAB || component==GOALIE || component==DISC || doomKey(component)>=0 || musicButton(component)>=0 || stock(component))) {
         auto it=contexts.find(gs);
         if(it!=contexts.end() && it->second.views[0].p) {
             std::array<U,3> key={reinterpret_cast<U>(gs),actor,component};
             if(event==RELEASE) {held.erase(key);if(doomKey(component)>=0) doom.key(unsigned(doomKey(component)),false);}
             else if(held.insert(key).second) {
                 auto& c=it->second;
-                if(stock(component)) {c.page=Page::Stock;doom.blur();}
-                else if(component==TAB) {c.page=Page::Tools;doom.blur();}
-                else if(component==QUESTION && DOOM_ENABLED) {c.page=Page::Doom;log(doom.start()?"Question tab: native Doom worker started/resumed":"Doom worker/data missing or launch failed");}
+                if(stock(component)) {c.page=Page::Stock;doom.blur();music.blur();}
+                else if(component==TAB) {c.page=Page::Tools;doom.blur();music.blur();}
+                else if(component==QUESTION && DOOM_ENABLED) {c.page=Page::Doom;music.blur();log(doom.start()?"Question tab: native Doom worker started/resumed":"Doom worker/data missing or launch failed");}
+                else if(component==MUSIC_TAB && MUSIC_ENABLED) {c.page=Page::Music;doom.blur();log(music.start()?"Music tab: native media worker started/resumed":"Music worker missing or launch failed");}
                 else if(c.page==Page::Doom && doomKey(component)>=0) doom.key(unsigned(doomKey(component)),true);
+                else if(c.page==Page::Music && musicButton(component)>=0) music.command(MUSIC_COMMANDS[musicButton(component)]);
                 else if(c.page==Page::Tools && component==DISC) {discOn=!discOn;if(!discOn) stop("PERSONAL DISC OFF | GOALIE OFF");log(discOn?"Personal Disc ON":"Personal Disc OFF");}
                 else if(c.page==Page::Tools && component==GOALIE) {
                     if(session.active) stop("GOALIE STOPPED");
