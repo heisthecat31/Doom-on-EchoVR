@@ -167,6 +167,26 @@ launch and page rendering independently of `DOOM_ENABLED`.
 Diagnostics: `%LOCALAPPDATA%\EchoTabletTrainer\trainer.log` for the tab, and
 `%LOCALAPPDATA%\EchoTabletTrainer\Music\worker.log` for the worker.
 
+## Publishing a double-clickable installer
+
+[publish_installer.py](publish_installer.py) copies the built package out of
+`PersonalDiscTrainer/native/dist` and writes `INSTALL_MUSIC.cmd`,
+`RESTORE_MUSIC.cmd` and a README beside it, so the tab can be installed without a
+console:
+
+```powershell
+python -B PersonalDiscTrainer/package_native.py
+python -B TabletMusic/publish_installer.py --dest "C:\path\to\EchoVR-Personal-Disc-Everywhere-main"
+```
+
+Publishing into a Personal Disc v3.0.1 folder is the intended use, and leaves that
+mod's own files untouched. The published installer finds the game itself —
+including Oculus libraries outside Program Files, which Personal Disc's own script
+does not search — refuses to run against stock disc scripts with a message
+pointing at `INSTALL.cmd`, and restores an existing tab before upgrading.
+
+Re-run both commands after any rebuild: the published copy is a snapshot.
+
 ## Remaining headset checks
 
 Confirm the MUSIC tab appears and opens, the six controls press and release, the

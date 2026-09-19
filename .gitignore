@@ -9,6 +9,7 @@ __pycache__/
 *.exe
 *.dll
 /TabletDoom/build/
+/TabletMusic/build/
 /PersonalDiscTrainer/native/build/
 /PersonalDiscTrainer/native/dist/
 /PersonalDiscTrainer/native/*.zip
