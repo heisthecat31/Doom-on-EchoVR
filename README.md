@@ -1,4 +1,4 @@
-# Tablet tabs for Echo VR
+# Tablet tabs for Echo VR (MADE BY BABS (babs)[https://github.com/nmdurkee/Doom-on-EchoVR]
 
 Extra tabs on Echo VR's hand tablet, sharing one native runtime:
 
